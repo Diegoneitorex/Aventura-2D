@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Juego de Aventuras 2D</title>
+    <style>
+        body {
+            margin: 0;
+            background: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #eee;
+        }
+
+        canvas {
+            background: #4a90e2;
+            border: 3px solid #333;
+            image-rendering: pixelated;
+        }
+
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 16px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="info">Usa flechas para moverte, espacio para saltar</div>
+    <canvas id="game" width="640" height="360"></canvas>
+
+    <script>
+        (() => {
+            const canvas = document.getElementById('game');
+            const ctx = canvas.getContext('2d');
+
+            // Constantes físicas
+            const GRAVEDAD = 0.6;
+            const FRICTION = 0.8;
+
+            // Jugador
+            class Player {
+                constructor() {
+                    this.width = 32;
+                    this.height = 48;
+                    this.x = 50;
+                    this.y = canvas.height - this.height - 40; // suelo
+                    this.velX = 0;
+                    this.velY = 0;
+                    this.speed = 3;
+                    this.jumping = false;
+                    this.color = '#ffcc00';
+                }
+
+                update(keys, platforms) {
+                    // Movimiento horizontal
+                    if (keys.right) {
+                        if (this.velX < this.speed) this.velX++;
+                    } else if (keys.left) {
+                        if (this.velX > -this.speed) this.velX--;
+                    } else {
+                        this.velX *= FRICTION;
+                    }
+
+                    // Salto
+                    if (keys.up && !this.jumping) {
+                        this.velY = -12;
+                        this.jumping = true;
+                    }
+
+                    this.velY += GRAVEDAD;
+
+                    this.x += this.velX;
+                    this.y += this.velY;
+
+                    // Colisiones con plataformas
+                    let onPlatform = false;
+                    for (let plat of platforms) {
+                        if (this.x < plat.x + plat.width &&
+                            this.x + this.width > plat.x &&
+                            this.y < plat.y + plat.height &&
+                            this.y + this.height > plat.y) {
+                            // Colisión vertical
+                            if (this.velY > 0 && this.y + this.height - this.velY <= plat.y) {
+                                this.y = plat.y - this.height;
+                                this.velY = 0;
+                                this.jumping = false;
+                                onPlatform = true;
+                            }
+                            // Colisión horizontal simple para no atravesar paredes
+                            else if (this.velX > 0 && this.x + this.width - this.velX <= plat.x) {
+                                this.x = plat.x - this.width;
+                                this.velX = 0;
+                            } else if (this.velX < 0 && this.x - this.velX >= plat.x + plat.width) {
+                                this.x = plat.x + plat.width;
+                                this.velX = 0;
+                            }
+                        }
+                    }
+
+                    // Limitar dentro del canvas
+                    if (this.x < 0) this.x = 0;
+                    if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+                    if (this.y + this.height > canvas.height) {
+                        this.y = canvas.height - this.height;
+                        this.velY = 0;
+                        this.jumping = false;
+                    }
+                }
+
+                draw(ctx) {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    // Ojos
+                    ctx.fillStyle = '#333';
+                    ctx.fillRect(this.x + 8, this.y + 12, 6, 6);
+                    ctx.fillRect(this.x + 18, this.y + 12, 6, 6);
+                }
+            }
+
+            // Plataforma
+            class Platform {
+                constructor(x, y, width, height) {
+                    this.x = x;
+                    this.y = y;
+                    this.width = width;
+                    this.height = height;
+                    this.color = '#654321';
+                }
+                draw(ctx) {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                }
+            }
+
+            // Variables de control
+            const keys = {
+                left: false,
+                right: false,
+                up: false
+            };
+
+            // Crear jugador y plataformas
+            const player = new Player();
+            const platforms = [
+                new Platform(0, canvas.height - 40, canvas.width, 40), // suelo
+                new Platform(150, 280, 100, 20),
+                new Platform(300, 220, 120, 20),
+                new Platform(480, 160, 100, 20)
+            ];
+
+            // Eventos teclado
+            window.addEventListener('keydown', e => {
+                if (e.code === 'ArrowLeft') keys.left = true;
+                if (e.code === 'ArrowRight') keys.right = true;
+                if (e.code === 'Space' || e.code === 'ArrowUp') keys.up = true;
+            });
+            window.addEventListener('keyup', e => {
+                if (e.code === 'ArrowLeft') keys.left = false;
+                if (e.code === 'ArrowRight') keys.right = false;
+                if (e.code === 'Space' || e.code === 'ArrowUp') keys.up = false;
+            });
+
+            // Bucle principal
+            function gameLoop() {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // Dibujar plataformas
+                for (let plat of platforms) {
+                    plat.draw(ctx);
+                }
+
+                // Actualizar y dibujar jugador
+                player.update(keys, platforms);
+                player.draw(ctx);
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            gameLoop();
+        })();
+    </script>
+
+</body>
+
+</html>
